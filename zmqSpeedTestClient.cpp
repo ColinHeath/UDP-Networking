@@ -1,57 +1,83 @@
 #include <zmq.hpp>
+#include <zmq_addon.hpp>
 #include <iostream>
 #include <string>
 #include <iomanip>
 #include <ctime>
+#include <fstream>
+#include <array>
 
 using namespace std;
 
 float* constructFloatSet(int seed);
+void recordTime(clock_t startClock);
+//int msg_send(zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
+//int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
 
 int main (int argc, char* argv[])
 {
-    //  Prepare our context and socket
-    zmq::context_t context (1);
-    zmq::socket_t socket (context, ZMQ_REQ);
+	if(argc == 2)
+	{
+		void *context = zmq_ctx_new();
 
-    std::cout << "Connecting to test server..." << std::endl;
-    socket.connect ("tcp://localhost:5555");
+		void *radio = zmq_socket(context, 14);
+		void *dish = zmq_socket(context, 15);
 
-    //  Do 10 requests, waiting each time for a response
-    cout << "Creating Arrays" << endl;
-    float* positionArray;
+		int rc = zmq_connect(radio, "udp://127.0.0.1:5556");
+		rc = zmq_bind(dish, "udp://127.0.0.1:5557");		
 
-    int frequencyArray[10000];
-    cout << "Arrays Created" << endl;
-    cout << "Attempting to Print argv[1]" << endl;
-    cout << atoi(argv[1]) << endl;
-    cout << "Success" << endl;
+	    float* positionArray;
 
-    for (int request_nbr = 0; request_nbr < atoi(argv[1]); request_nbr++)
-    {
-    	srand(request_nbr);
-    	cout << "Sending Message" << endl;
-    	
-    	positionArray = constructFloatSet(request_nbr);
+	    ofstream output("clientOutput.txt");
 
-        zmq::message_t request (28);
-        memcpy(request.data(), positionArray, 28);
+	    cout << "Initialization Complete" << endl;
 
-        clock_t startClock = clock();
+	    for (int request_nbr = 0; request_nbr < atoi(argv[1]); request_nbr++)
+	    {
+	    	cout << "Sending Message" << endl;
+	    	
+	    	positionArray = constructFloatSet(request_nbr);
+	        clock_t startClock = clock();
 
-        socket.send(request);
+	        cout << "Clock Started: " << startClock << endl;
 
-        //  Get the reply.
-        zmq::message_t reply;
-        socket.recv(&reply);
+	        //Send Message
+	        zmq_msg_t message;
+	        zmq_msg_init_size(&message, sizeof(*positionArray));
+	        memcpy(zmq_msg_data(&message), positionArray, sizeof(*positionArray));
 
-        clock_t endClock = clock();
+	        zmq_msg_send(&message, radio, 0);
 
-        cout << "Response Received" << endl;
-	    frequencyArray[(int)(((double)(endClock - startClock))/(double)CLOCKS_PER_SEC)]++;
-    }
+	        zmq_msg_close(&message);
+	        //Message Sent
 
-    return 0;
+	        zmq_msg_t receivedMessage;
+	        zmq_msg_init(&receivedMessage);
+	        int returnCode = zmq_msg_recv(&receivedMessage, dish, 0);
+
+	        if(rc != -1)
+	        {
+	        	recordTime(startClock);
+	        }
+	        else
+	        {
+	        	output << "Failed" << endl;
+	        }
+	    }
+
+
+	    zmq_close(dish);
+	    zmq_close(radio);
+
+	    zmq_ctx_term(context);
+
+	    return 0;
+	}
+	else
+	{
+		cout << "Please Enter the Proper Number of Arguments" << endl;
+		return -1;
+	}
 }
 
 float* constructFloatSet(int seed)
@@ -67,3 +93,70 @@ float* constructFloatSet(int seed)
 
 	return set;
 }
+
+void recordTime(clock_t startClock)
+{
+	clock_t endClock = clock();
+
+	int duration = (endClock - startClock)/CLOCKS_PER_SEC;
+
+	ofstream output("clientOutput.txt");
+
+	output << duration << endl;
+}
+
+/*int msg_send (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
+{
+    int rc = zmq_msg_init_size (msg_, strlen (body_));
+    if (rc != 0)
+        return rc;
+
+    memcpy (zmq_msg_data (msg_), body_, strlen (body_));
+
+    rc = zmq_msg_set_group (msg_, group_);
+    if (rc != 0) {
+        zmq_msg_close (msg_);
+        return rc;
+    }
+
+    rc = zmq_msg_send (msg_, s_, 0);
+
+    zmq_msg_close (msg_);
+
+    return rc;
+}
+
+int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
+{
+    int rc = zmq_msg_init (msg_);
+    if (rc != 0)
+        return -1;
+
+    int recv_rc = zmq_msg_recv (msg_, s_, 0);
+    if (recv_rc == -1) {
+        zmq_msg_close(msg_);
+        return -1;
+    }
+
+    if (strcmp (zmq_msg_group (msg_), group_) != 0)
+    {
+        zmq_msg_close (msg_);
+        return -1;
+    }
+
+    char * body = (char*) malloc (sizeof(char) * (zmq_msg_size (msg_) + 1));
+    memcpy (body, zmq_msg_data (msg_), zmq_msg_size (msg_));
+    body [zmq_msg_size (msg_)] = '\0';
+
+    if (strcmp (body, body_) != 0)
+    {
+        zmq_msg_close (msg_);
+        free(body);
+        return -1;
+    }
+
+    zmq_msg_close (msg_);
+    free (body);
+    return recv_rc;
+}*/
+
