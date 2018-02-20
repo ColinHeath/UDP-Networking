@@ -17,21 +17,32 @@
 
 int main () {
     //  Prepare our context and socket
-    zmq::context_t context (1);
-    zmq::socket_t socket (context, ZMQ_REP);
-    socket.bind ("tcp://*:5555");
+    void *context = zmq_ctx_new();
 
-    while (true) {
-        zmq::message_t request;
+    void *radio = zmq_socket(context, 14);
+    void *dish = zmq_socket(context, 15);
 
-        //  Wait for next request from client
-        socket.recv (&request);
-        std::cout << "Received Float Set" << std::endl;
+    int setupCode = zmq_connect(radio, "udp://127.0.0.1:5557");
+    setupCode = zmq_connect(dish, "udp://127.0.0.1:5556");
+    
 
-        //  Send reply back to client
-        zmq::message_t reply (5);
-        memcpy (reply.data (), "World", 5);
-        socket.send (reply);
+    bool isRunning = true;
+    while (isRunning) {
+        //Receive Message from Client
+        zmq_msg_t receivedMessage;
+
+        zmq_msg_init(&receivedMessage);
+        int returnCode = zmq_msg_recv(&receivedMessage, dish, 0);
+
+        //Add in confirmation of floats
+
+        //Send reply to client
+        zmq_msg_t sendMessage;
+        zmq_msg_init_size(&sendMessage, sizeof(returnCode));
+
+        memcpy(zmq_msg_data(&sendMessage), &returnCode, sizeof(returnCode));
+
+        zmq_msg_send(&sendMessage, radio, 0);
     }
     return 0;
 }
