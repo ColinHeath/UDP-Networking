@@ -1,5 +1,7 @@
 #include <zmq.hpp>
+#include <zmq.h>
 #include <zmq_addon.hpp>
+#include <zmq_draft.h>
 #include <iostream>
 #include <string>
 #include <iomanip>
@@ -11,22 +13,24 @@ using namespace std;
 
 float* constructFloatSet(int seed);
 void recordTime(clock_t startClock);
-//int msg_send(zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
-//int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
+int msg_send(zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
+int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
 
 int main (int argc, char* argv[])
 {
 	if(argc == 2)
 	{
 		void *context = zmq_ctx_new();
+		assert(context);
 
-		void *radio = zmq_socket(context, 14);
-		void *dish = zmq_socket(context, 15);
+		void *radio = zmq_socket(context, ZMQ_RADIO);
+		void *dish = zmq_socket(context, ZMQ_DISH);
 
 		int rc = zmq_connect(radio, "udp://127.0.0.1:5556");
-		rc = zmq_bind(dish, "udp://127.0.0.1:5557");		
+		assert(rc == 0);
 
-	    float* positionArray;
+		rc = zmq_bind(dish, "udp://127.0.0.1:5556");		
+		assert(rc == 0);
 
 	    ofstream output("clientOutput.txt");
 
@@ -34,37 +38,48 @@ int main (int argc, char* argv[])
 
 	    for (int request_nbr = 0; request_nbr < atoi(argv[1]); request_nbr++)
 	    {
-	    	cout << "Sending Message" << endl;
-	    	
-	    	positionArray = constructFloatSet(request_nbr);
+	    	float* positionArray = constructFloatSet(request_nbr);
+		    zmq_msg_t message;
+
+	    	cout << "Preparing Message" << endl;
 	        clock_t startClock = clock();
 
 	        cout << "Clock Started: " << startClock << endl;
 
 	        //Send Message
-	        zmq_msg_t message;
+
 	        zmq_msg_init_size(&message, sizeof(*positionArray));
 	        memcpy(zmq_msg_data(&message), positionArray, sizeof(*positionArray));
 
-	        zmq_msg_send(&message, radio, 0);
+	        std::cout << "Memory Copied" << std::endl;
+
+	        rc = zmq_msg_send(&message, radio, 0);
+	        assert(rc != -1);
 
 	        zmq_msg_close(&message);
+
+	        std::cout << "Message Sent" << std::endl;
 	        //Message Sent
 
 	        zmq_msg_t receivedMessage;
 	        zmq_msg_init(&receivedMessage);
-	        int returnCode = zmq_msg_recv(&receivedMessage, dish, 0);
 
+	        std::cout << "Receive Initialized" <<std::endl;
+
+	        rc = zmq_msg_recv(&receivedMessage, dish, 0);
 	        if(rc != -1)
 	        {
-	        	recordTime(startClock);
+	        	std::cout << "Proper Return Code" << std::endl;
 	        }
 	        else
 	        {
-	        	output << "Failed" << endl;
+	        	output << "Message Receive Failed" << endl;
 	        }
+
+       	    delete [] positionArray;
 	    }
 
+	    std::cout << "Outside of for" << std::endl;
 
 	    zmq_close(dish);
 	    zmq_close(radio);
@@ -83,14 +98,15 @@ int main (int argc, char* argv[])
 float* constructFloatSet(int seed)
 {
 	srand(seed);
-
-	float* set = new float;
+	std::cout << "Seed Planted" << std::endl;
+	float* set = new float[7];
+	std::cout << "Set declared" << std::endl;
 
 	for(int i = 0; i < 7; i++)
 	{
 		set[i] = rand();
 	}
-
+	std::cout << "Set Constructed" << std::endl;
 	return set;
 }
 
@@ -105,19 +121,13 @@ void recordTime(clock_t startClock)
 	output << duration << endl;
 }
 
-/*int msg_send (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
+int msg_send (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
 {
     int rc = zmq_msg_init_size (msg_, strlen (body_));
     if (rc != 0)
         return rc;
 
     memcpy (zmq_msg_data (msg_), body_, strlen (body_));
-
-    rc = zmq_msg_set_group (msg_, group_);
-    if (rc != 0) {
-        zmq_msg_close (msg_);
-        return rc;
-    }
 
     rc = zmq_msg_send (msg_, s_, 0);
 
@@ -129,18 +139,17 @@ void recordTime(clock_t startClock)
 int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
 {
     int rc = zmq_msg_init (msg_);
+ 
+ 	std::cout << "Receive Initialized" << std::endl;
+
     if (rc != 0)
         return -1;
 
     int recv_rc = zmq_msg_recv (msg_, s_, 0);
+
+    std::cout << "Message Received" << std::endl;
     if (recv_rc == -1) {
         zmq_msg_close(msg_);
-        return -1;
-    }
-
-    if (strcmp (zmq_msg_group (msg_), group_) != 0)
-    {
-        zmq_msg_close (msg_);
         return -1;
     }
 
@@ -158,5 +167,5 @@ int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* bod
     zmq_msg_close (msg_);
     free (body);
     return recv_rc;
-}*/
+}
 
