@@ -1,4 +1,7 @@
-import NumPy as NumPy
-histogramData = NumPy.loadtxt("clientOutput.txt", long)
+import matplotlib.pyplot as pyplot
+import numpy as numpy
 
-print(NumPy.histogram());
+x = numpy.random.random_integers(1, 100, 5)
+pyplot.hist(x, bins=20)
+pyplot.ylabel('Frequency')
+pyplot.show()
