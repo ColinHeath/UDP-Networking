@@ -4,17 +4,16 @@
 #include <zmq_draft.h>
 #include <iostream>
 #include <string>
-#include <iomanip>
-#include <ctime>
 #include <fstream>
-#include <array>
-
+#include <time.h>
+#include <chrono>
+#include <thread>
 using namespace std;
 
 float* constructFloatSet(int seed);
 void recordTime(clock_t startClock);
-int msg_send(zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
-int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_);
+int msg_send(zmq_msg_t *msg_, void *s_, const char* body_);
+int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* body_);
 
 int main (int argc, char* argv[])
 {
@@ -26,13 +25,17 @@ int main (int argc, char* argv[])
 		void *radio = zmq_socket(context, ZMQ_RADIO);
 		void *dish = zmq_socket(context, ZMQ_DISH);
 
-		int rc = zmq_connect(radio, "udp://127.0.0.1:5556");
+		int rc = zmq_connect(radio, "udp://127.0.0.1:29900");
 		assert(rc == 0);
 
-		rc = zmq_bind(dish, "udp://127.0.0.1:5556");		
+		rc = zmq_bind(dish, "udp://127.0.0.1:29901");		
 		assert(rc == 0);
 
 	    ofstream output("clientOutput.txt");
+
+	    cout << "Sleep Started" << endl;
+
+	    this_thread::sleep_until(chrono::system_clock::now() + chrono::seconds(1));
 
 	    cout << "Initialization Complete" << endl;
 
@@ -47,26 +50,17 @@ int main (int argc, char* argv[])
 	        cout << "Clock Started: " << startClock << endl;
 
 	        //Send Message
-
-	        zmq_msg_init_size(&message, sizeof(*positionArray));
-	        memcpy(zmq_msg_data(&message), positionArray, sizeof(*positionArray));
-
-	        std::cout << "Memory Copied" << std::endl;
-
-	        rc = zmq_msg_send(&message, radio, 0);
-	        assert(rc != -1);
-
-	        zmq_msg_close(&message);
+	        std::string content = "Hello";
+			assert(msg_send(&message, radio, content.c_str()) == (int)content.size());
 
 	        std::cout << "Message Sent" << std::endl;
 	        //Message Sent
 
 	        zmq_msg_t receivedMessage;
-	        zmq_msg_init(&receivedMessage);
 
 	        std::cout << "Receive Initialized" <<std::endl;
 
-	        rc = zmq_msg_recv(&receivedMessage, dish, 0);
+	        rc = msg_recv_cmp(&receivedMessage, dish, 0);
 	        if(rc != -1)
 	        {
 	        	std::cout << "Proper Return Code" << std::endl;
@@ -121,7 +115,7 @@ void recordTime(clock_t startClock)
 	output << duration << endl;
 }
 
-int msg_send (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
+int msg_send (zmq_msg_t *msg_, void *s_, const char* body_)
 {
     int rc = zmq_msg_init_size (msg_, strlen (body_));
     if (rc != 0)
@@ -136,7 +130,7 @@ int msg_send (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
     return rc;
 }
 
-int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* group_, const char* body_)
+int msg_recv_cmp (zmq_msg_t *msg_, void *s_, const char* body_)
 {
     int rc = zmq_msg_init (msg_);
  
